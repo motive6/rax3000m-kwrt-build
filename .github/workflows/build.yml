@@ -61,6 +61,17 @@ jobs:
           chmod 0755 files/etc/init.d/openclash files/etc/uci-defaults/99-openclash-ninja-core files/usr/share/openclash/core/clash_meta
           test -x files/usr/share/openclash/core/clash_meta
 
+      - name: Configure Kwrt package feeds
+        run: |
+          BASE="https://dl.openwrt.ai/packages-25.12/aarch64_cortex-a53"
+          cat >> "$IB_DIR/repositories.conf" <<EOF
+          src/gz kwrt_base_extra $BASE/base
+          src/gz kwrt_luci_extra $BASE/luci
+          src/gz kwrt_packages_extra $BASE/packages
+          src/gz kwrt_routing_extra $BASE/routing
+          src/gz kwrt_kiddin9_extra $BASE/kiddin9
+          EOF
+
       - name: Show ImageBuilder profiles
         run: |
           cd "$IB_DIR"
@@ -95,16 +106,3 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: build-${{ github.run_number }}
-          name: RAX3000M build ${{ github.run_number }}
-          body: |
-            Kwrt 25.12 ImageBuilder output for CMCC RAX3000M NAND.
-            Includes the local OpenNinja package and ARM64 UPX core.
-            Flash only the sysupgrade image from LuCI.
-          files: |
-            imagebuilder-info.txt
-            SHA256SUMS
-            imagebuilder/**/bin/targets/**/*
