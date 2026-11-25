@@ -2,6 +2,9 @@ name: Build RAX3000M OpenNinja Firmware
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: write
