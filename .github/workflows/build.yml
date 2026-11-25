@@ -58,7 +58,7 @@ jobs:
       - name: Add local OpenNinja package
         run: |
           cp custom/luci-app-openclash_1.0.0-1_all.ipk "$IB_DIR/packages/"
-          chmod 0755 files/etc/init.d/openclash files/etc/uci-defaults/99-openclash-ninja-core
+          chmod 0755 files/etc/init.d/openclash files/etc/uci-defaults/99-openclash-ninja-core files/usr/share/openclash/core/clash_meta
           test -x files/usr/share/openclash/core/clash_meta
 
       - name: Show ImageBuilder profiles
