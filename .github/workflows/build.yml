@@ -1,0 +1,110 @@
+name: Build RAX3000M OpenNinja Firmware
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  IMAGEBUILDER_URL: https://dl.openwrt.ai/releases/25.12/targets/mediatek/filogic/kwrt-imagebuilder-mediatek-filogic.Linux-x86_64.tar.zst
+  IMAGEBUILDER_SHA256: 4501d4f8844fc1e941d603cb2286963f44188e633b8884a6192ac19c767656df
+  PROFILE: cmcc_rax3000m-nand
+  PACKAGES: >-
+    bash curl automount luci-app-diskman luci-app-nlbwmon
+    luci-app-wrtbwmon luci-app-fwlive luci-app-natmap luci-app-socat
+    luci-app-openvpn-plus luci-app-guest-wifi luci-app-partexp
+    luci-app-arpbind luci-app-timedreboot luci-app-ssr-plus
+    luci-app-openclash ip-full jsonfilter ruby ruby-yaml kmod-tun unzip
+    kmod-nft-core kmod-nft-nat kmod-nft-tproxy nftables-json
+    kmod-usb-storage kmod-usb-storage-extras kmod-fs-ext4
+    kmod-fs-exfat kmod-fs-ntfs3 exfat-mkfs exfat-fsck smartmontools smartd
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free runner disk space
+        uses: coder-xiaomo/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aria2 zstd
+
+      - name: Download and verify ImageBuilder
+        run: |
+          aria2c -x 8 -s 8 -o imagebuilder.tar.zst "$IMAGEBUILDER_URL"
+          echo "$IMAGEBUILDER_SHA256  imagebuilder.tar.zst" | sha256sum -c -
+          mkdir imagebuilder
+          tar --zstd -xf imagebuilder.tar.zst -C imagebuilder
+          IB_DIR="$(find imagebuilder -mindepth 1 -maxdepth 2 -type f -name Makefile -printf '%h\n' | head -n 1)"
+          test -n "$IB_DIR"
+          echo "IB_DIR=$IB_DIR" >> "$GITHUB_ENV"
+
+      - name: Add local OpenNinja package
+        run: |
+          cp custom/luci-app-openclash_1.0.0-1_all.ipk "$IB_DIR/packages/"
+          chmod 0755 files/etc/init.d/openclash files/etc/uci-defaults/99-openclash-ninja-core
+          test -x files/usr/share/openclash/core/clash_meta
+
+      - name: Show ImageBuilder profiles
+        run: |
+          cd "$IB_DIR"
+          make info | tee "$GITHUB_WORKSPACE/imagebuilder-info.txt"
+
+      - name: Build firmware
+        run: |
+          cd "$IB_DIR"
+          make image \
+            PROFILE="$PROFILE" \
+            PACKAGES="$PACKAGES" \
+            FILES="$GITHUB_WORKSPACE/files" \
+            -j"$(nproc)"
+
+      - name: Verify and checksum outputs
+        run: |
+          cd "$IB_DIR"
+          find bin/targets -type f -printf '%s  %p\n' | sort -nr
+          find bin/targets -type f -name '*sysupgrade*' -print -quit | grep .
+          cd bin/targets
+          find . -type f \( -name '*sysupgrade*' -o -name '*manifest' \) -print0 \
+            | sort -z | xargs -0 sha256sum | tee "$GITHUB_WORKSPACE/SHA256SUMS"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rax3000m-kwrt-openclash
+          path: |
+            imagebuilder-info.txt
+            SHA256SUMS
+            imagebuilder/**/bin/targets/**/*
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: RAX3000M build ${{ github.run_number }}
+          body: |
+            Kwrt 25.12 ImageBuilder output for CMCC RAX3000M NAND.
+            Includes the local OpenNinja package and ARM64 UPX core.
+            Flash only the sysupgrade image from LuCI.
+          files: |
+            imagebuilder-info.txt
+            SHA256SUMS
+            imagebuilder/**/bin/targets/**/*

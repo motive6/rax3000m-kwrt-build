@@ -1,0 +1,8 @@
+#!/bin/sh
+uci -q set openclash.config.enable='0'
+uci -q set openclash.config.core_type='Meta'
+uci -q set openclash.config.core_version='linux-arm64'
+uci -q set openclash.config.small_flash_memory='1'
+uci -q set openclash.config.smart_enable='0'
+uci -q commit openclash
+exit 0
